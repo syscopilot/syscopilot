@@ -10,6 +10,14 @@ from .models import Mode
 app = typer.Typer()
 
 
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context):
+    """Syscopilot CLI entrypoint."""
+    if ctx.invoked_subcommand is None:
+        print(ctx.get_help())
+        raise typer.Exit(code=0)
+
+
 @app.command()
 def analyze(
     file: Path,
