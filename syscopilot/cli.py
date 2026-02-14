@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import cast
 
 import typer
 from rich import print
@@ -10,13 +11,25 @@ app = typer.Typer()
 
 
 @app.command()
-def analyze(file: Path, mode: Mode = typer.Option("short", "--mode")):
+def analyze(
+    file: Path,
+    mode: str = typer.Option(
+        "short",
+        "--mode",
+        help="Analysis mode: short or full (case-insensitive).",
+    ),
+):
+    normalized_mode = mode.lower()
+    if normalized_mode not in {"short", "full"}:
+        print("[red]Invalid mode. Use 'short' or 'full'.[/red]")
+        raise typer.Exit(code=2)
+
     if not file.exists():
         print("[red]File not found[/red]")
         raise typer.Exit()
 
     content = file.read_text()
-    report = analyze_system(content, mode=mode)
+    report = analyze_system(content, mode=cast(Mode, normalized_mode))
     print("[bold]Architecture Summary[/bold]")
     print(report.architecture_summary)
     print("\n[bold]Top Concrete Fixes[/bold]")

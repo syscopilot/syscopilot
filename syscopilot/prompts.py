@@ -49,7 +49,7 @@ SCHEMAS = {
     "full": FULL_SCHEMA,
 }
 
-USER_TEMPLATE = """\
+USER_TEMPLATE = """
 Return ONLY valid, compact JSON (no markdown, no explanations, no trailing text).
 
 Required schema (all keys required):

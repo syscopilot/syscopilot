@@ -70,6 +70,6 @@ def analyze_system(description: str, mode: Mode = "short") -> ReportLike:
 
     report_path = os.path.join("runs", f"report_{ts}.json")
     with open(report_path, "w", encoding="utf-8") as f:
-        f.write(report.model_dump_json())
+        json.dump(report.model_dump(), f, separators=(",", ":"), sort_keys=True)
 
     return report
