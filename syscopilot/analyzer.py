@@ -1,12 +1,15 @@
-import os
 import json
+import os
 from datetime import datetime
-from dotenv import load_dotenv
+
 from anthropic import Anthropic
-from .prompts import SYSTEM_PROMPT, USER_TEMPLATE
-from .models import Report
+from dotenv import load_dotenv
+
+from .models import Mode, Report, ReportLike, ShortReport
+from .prompts import SCHEMAS, SIZE_CONSTRAINTS, SYSTEM_PROMPT, USER_TEMPLATE
 
 load_dotenv()
+
 
 def _extract_text(resp) -> str:
     parts = []
@@ -15,14 +18,25 @@ def _extract_text(resp) -> str:
             parts.append(block.text)
     return "\n".join(parts).strip()
 
-def analyze_system(description: str) -> Report:
+
+def _validate_report(data: dict, mode: Mode) -> ReportLike:
+    if mode == "full":
+        return Report.model_validate(data)
+    return ShortReport.model_validate(data)
+
+
+def analyze_system(description: str, mode: Mode = "short") -> ReportLike:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not found in .env")
 
     client = Anthropic(api_key=api_key)
 
-    prompt = USER_TEMPLATE.format(description=description)
+    prompt = USER_TEMPLATE.format(
+        description=description,
+        schema=SCHEMAS[mode],
+        size_constraints=SIZE_CONSTRAINTS[mode],
+    )
 
     resp = client.messages.create(
         model="claude-opus-4-6",
@@ -34,14 +48,12 @@ def analyze_system(description: str) -> Report:
 
     raw = _extract_text(resp)
 
-    # Always dump raw output for inspection
     os.makedirs("runs", exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     raw_path = os.path.join("runs", f"raw_{ts}.txt")
     with open(raw_path, "w", encoding="utf-8") as f:
         f.write(raw)
 
-    # Now try parse once (no retries)
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -54,5 +66,10 @@ def analyze_system(description: str) -> Report:
             f"Model returned invalid JSON. Saved raw output to {raw_path} and error to {err_path}"
         ) from e
 
-    report = Report.model_validate(data)
+    report = _validate_report(data, mode)
+
+    report_path = os.path.join("runs", f"report_{ts}.json")
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report.model_dump(), f, separators=(",", ":"), sort_keys=True)
+
     return report
