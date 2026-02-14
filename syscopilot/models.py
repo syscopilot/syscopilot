@@ -12,7 +12,7 @@ class ShortReport(BaseModel):
     concrete_fixes: List[str]
 
 
-class FullReport(BaseModel):
+class Report(BaseModel):
     architecture_summary: str = Field(..., min_length=1)
     assumptions_detected: List[str]
     idempotency_risks: List[str]
@@ -26,4 +26,4 @@ class FullReport(BaseModel):
 
 
 Mode = Literal["short", "full"]
-Report = Union[ShortReport, FullReport]
+ReportLike = Union[ShortReport, Report]

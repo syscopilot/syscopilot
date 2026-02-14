@@ -5,7 +5,7 @@ from datetime import datetime
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
-from .models import FullReport, Mode, Report, ShortReport
+from .models import Mode, Report, ReportLike, ShortReport
 from .prompts import SCHEMAS, SIZE_CONSTRAINTS, SYSTEM_PROMPT, USER_TEMPLATE
 
 load_dotenv()
@@ -19,13 +19,13 @@ def _extract_text(resp) -> str:
     return "\n".join(parts).strip()
 
 
-def _validate_report(data: dict, mode: Mode) -> Report:
+def _validate_report(data: dict, mode: Mode) -> ReportLike:
     if mode == "full":
-        return FullReport.model_validate(data)
+        return Report.model_validate(data)
     return ShortReport.model_validate(data)
 
 
-def analyze_system(description: str, mode: Mode = "short") -> Report:
+def analyze_system(description: str, mode: Mode = "short") -> ReportLike:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not found in .env")
@@ -49,7 +49,7 @@ def analyze_system(description: str, mode: Mode = "short") -> Report:
     raw = _extract_text(resp)
 
     os.makedirs("runs", exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     raw_path = os.path.join("runs", f"raw_{ts}.txt")
     with open(raw_path, "w", encoding="utf-8") as f:
         f.write(raw)
