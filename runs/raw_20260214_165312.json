@@ -1,0 +1,57 @@
+{
+    "architecture_summary": "WebSocket ingestion receives price ticks, processes them inline, writes to Postgres, and triggers alerts synchronously in the same path.",
+    "assumptions_detected": [
+        "No message queue or buffer exists between ingestion and processing.",
+        "Alerts are sent via synchronous HTTP/webhook calls.",
+        "Postgres is the sole data store with no write-ahead buffer.",
+        "No deduplication mechanism exists for duplicate ticks."
+    ],
+    "idempotency_risks": [
+        "Duplicate ticks from reconnects will create duplicate Postgres rows.",
+        "Alert webhooks may fire multiple times for the same tick event.",
+        "No idempotency key on tick writes to detect replayed messages.",
+        "Postgres upsert or unique constraint on tick ID is not mentioned."
+    ],
+    "responsibility_coupling": [
+        "WebSocket handler owns ingestion, processing, DB write, and alerting in one call path.",
+        "Alert logic failure can block or crash the tick ingestion pipeline.",
+        "DB write latency directly stalls the WebSocket read loop.",
+        "Parsing, validation, storage, and notification share a single failure domain."
+    ],
+    "backpressure_analysis": [
+        "No buffering means a slow Postgres write stalls WebSocket consumption.",
+        "Synchronous alerts add unbounded latency to the ingestion hot path.",
+        "Burst tick rates can overwhelm Postgres connection pool causing cascading timeouts.",
+        "No mechanism to shed load or drop stale ticks under pressure."
+    ],
+    "ingestion_vs_processing": [
+        "Ingestion and processing are not separated; ticks are handled inline.",
+        "Insert a durable queue (e.g., Kafka or Redis Streams) between ingestion and DB writes.",
+        "Decouple alert evaluation into a separate consumer downstream of the queue.",
+        "WebSocket handler should only validate and enqueue, not write or alert."
+    ],
+    "failure_scenarios": [
+        "Postgres downtime halts tick ingestion entirely with no recovery buffer.",
+        "Alert webhook timeout blocks the pipeline, causing tick backlog and disconnects.",
+        "WebSocket reconnect replays ticks with no dedup, corrupting data and re-firing alerts.",
+        "OOM risk if ticks accumulate in memory during downstream slowdowns."
+    ],
+    "concrete_fixes": [
+        "Add a unique constraint on (source, tick_timestamp, symbol) in Postgres for dedup.",
+        "Move DB writes and alerts to async consumers reading from a durable queue.",
+        "Implement per-symbol circuit breakers on alert webhook calls.",
+        "Add a bounded in-process ring buffer with drop-oldest policy for backpressure."
+    ],
+    "suggested_metrics": [
+        "p99 latency from tick receipt to Postgres commit.",
+        "Queue depth between ingestion and processing consumers.",
+        "Alert webhook error rate and latency by endpoint.",
+        "Duplicate tick detection rate per symbol per minute.",
+        "WebSocket reconnect frequency and message replay count.",
+        "Postgres connection pool utilization and wait time."
+    ],
+    "failure_injection_tests": [
+        "Simulate Postgres unavailability for 60s and verify no tick loss and correct recovery.",
+        "Inject 5s latency on alert webhook and confirm ingestion throughput is unaffected."
+    ]
+}
