@@ -1,13 +1,17 @@
 import json
+import os
+import secrets
 from datetime import datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 from pydantic import BaseModel
 
 
 def make_timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+    return f"{timestamp}_{os.getpid()}_{secrets.token_hex(3)}"
 
 
 def ensure_runs_dir(path: str = "runs") -> None:
@@ -20,6 +24,13 @@ def _as_dict(report: dict[str, Any] | BaseModel) -> dict[str, Any]:
     return report
 
 
+def _atomic_write(path: Path, content: str) -> None:
+    with NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as tmp_file:
+        tmp_file.write(content)
+        tmp_path = Path(tmp_file.name)
+    os.replace(tmp_path, path)
+
+
 def save_run(raw: str, report: dict[str, Any] | BaseModel, runs_dir: str = "runs") -> dict[str, str]:
     ensure_runs_dir(runs_dir)
     ts = make_timestamp()
@@ -27,7 +38,7 @@ def save_run(raw: str, report: dict[str, Any] | BaseModel, runs_dir: str = "runs
     raw_path = Path(runs_dir) / f"raw_{ts}.txt"
     report_path = Path(runs_dir) / f"report_{ts}.json"
 
-    raw_path.write_text(raw, encoding="utf-8")
+    _atomic_write(raw_path, raw)
 
     report_dict = _as_dict(report)
     report_json = json.dumps(
@@ -36,7 +47,7 @@ def save_run(raw: str, report: dict[str, Any] | BaseModel, runs_dir: str = "runs
         sort_keys=True,
         ensure_ascii=False,
     )
-    report_path.write_text(report_json, encoding="utf-8")
+    _atomic_write(report_path, report_json)
 
     return {
         "raw_path": str(raw_path),
@@ -49,6 +60,6 @@ def save_json_error(raw: str, error: str, runs_dir: str = "runs") -> str:
     ts = make_timestamp()
     err_path = Path(runs_dir) / f"json_error_{ts}.txt"
 
-    contents = f"JSONDecodeError: {error}\n\n---- RAW OUTPUT ----\n{raw}"
-    err_path.write_text(contents, encoding="utf-8")
+    contents = f"InvalidModelJSON: {error}\n\n---- RAW OUTPUT ----\n{raw}"
+    _atomic_write(err_path, contents)
     return str(err_path)

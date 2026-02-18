@@ -1,9 +1,11 @@
 from typing import List, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ShortReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     architecture_summary: str = Field(..., min_length=1)
     assumptions_detected: List[str]
     idempotency_risks: List[str]
@@ -13,6 +15,8 @@ class ShortReport(BaseModel):
 
 
 class Report(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     architecture_summary: str = Field(..., min_length=1)
     assumptions_detected: List[str]
     idempotency_risks: List[str]
