@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from dataclasses import dataclass
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
@@ -9,6 +9,19 @@ from .models import Mode, Report, ReportLike, ShortReport
 from .prompts import SCHEMAS, SIZE_CONSTRAINTS, SYSTEM_PROMPT, USER_TEMPLATE
 
 load_dotenv()
+
+
+class InvalidModelJSON(ValueError):
+    def __init__(self, raw_text: str, error: str):
+        super().__init__(f"Model returned invalid JSON: {error}")
+        self.raw_text = raw_text
+        self.error = error
+
+
+@dataclass(frozen=True)
+class AnalysisResult:
+    report: ReportLike
+    raw: str
 
 
 def _extract_text(resp) -> str:
@@ -25,7 +38,7 @@ def _validate_report(data: dict, mode: Mode) -> ReportLike:
     return ShortReport.model_validate(data)
 
 
-def analyze_system(description: str, mode: Mode = "short") -> ReportLike:
+def analyze_system(description: str, mode: Mode = "short") -> AnalysisResult:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not found in .env")
@@ -48,28 +61,10 @@ def analyze_system(description: str, mode: Mode = "short") -> ReportLike:
 
     raw = _extract_text(resp)
 
-    os.makedirs("runs", exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    raw_path = os.path.join("runs", f"raw_{ts}.txt")
-    with open(raw_path, "w", encoding="utf-8") as f:
-        f.write(raw)
-
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        err_path = os.path.join("runs", f"json_error_{ts}.txt")
-        with open(err_path, "w", encoding="utf-8") as f:
-            f.write(f"JSONDecodeError: {e}\n\n")
-            f.write("---- RAW OUTPUT ----\n")
-            f.write(raw)
-        raise RuntimeError(
-            f"Model returned invalid JSON. Saved raw output to {raw_path} and error to {err_path}"
-        ) from e
+        raise InvalidModelJSON(raw_text=raw, error=str(e)) from e
 
     report = _validate_report(data, mode)
-
-    report_path = os.path.join("runs", f"report_{ts}.json")
-    with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(report.model_dump(), f, separators=(",", ":"), sort_keys=True)
-
-    return report
+    return AnalysisResult(report=report, raw=raw)
