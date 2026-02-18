@@ -59,7 +59,6 @@ Hard rules (MUST follow):
 - Output MUST be valid JSON only (no code fences, no markdown, no commentary).
 - Output MUST be a single JSON object starting with '{{' and ending with '}}'.
 - Use COMPACT JSON: no pretty-printing, no extra whitespace, no newlines.
-- Do NOT include newline characters inside any JSON string.
 - Do NOT use quotes inside strings unless escaped.
 
 Size constraints (MUST follow):
@@ -68,6 +67,7 @@ Size constraints (MUST follow):
 Quality constraints:
 - Be concrete: name boundaries (e.g., "WebSocket handler", "DB write", "alert webhook").
 - If something is unknown, add it to assumptions_detected (do not invent facts).
+- If size constraints are too tight, output the shortest valid JSON that satisfies the schema.
 
 System description:
 {description}
