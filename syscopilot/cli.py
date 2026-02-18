@@ -1,10 +1,13 @@
+import os
 from pathlib import Path
 from typing import cast
 
 import typer
+from dotenv import load_dotenv
 from rich import print
 
-from .analyzer import analyze_system
+from .analyzer import InvalidModelJSON, analyze_system
+from .artifacts import save_json_error, save_run
 from .models import Mode
 
 app = typer.Typer()
@@ -36,8 +39,24 @@ def analyze(
         print("[red]File not found[/red]")
         raise typer.Exit()
 
-    content = file.read_text()
-    report = analyze_system(content, mode=cast(Mode, normalized_mode))
+    load_dotenv()
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("[red]ANTHROPIC_API_KEY not found in environment.[/red]")
+        raise typer.Exit(code=1)
+
+    content = file.read_text(encoding="utf-8")
+
+    try:
+        result = analyze_system(content, mode=cast(Mode, normalized_mode), api_key=api_key)
+    except InvalidModelJSON as exc:
+        error_path = save_json_error(exc.raw_text, exc.error, runs_dir="runs")
+        print(f"[red]Model returned invalid JSON.[/red] Saved error artifact to [bold]{error_path}[/bold].")
+        raise typer.Exit(code=1)
+
+    save_run(result.raw, result.report, runs_dir="runs")
+
+    report = result.report
     print("[bold]Architecture Summary[/bold]")
     print(report.architecture_summary)
     print("\n[bold]Top Concrete Fixes[/bold]")
