@@ -50,8 +50,14 @@ def analyze(
     try:
         result = analyze_system(content, mode=cast(Mode, normalized_mode), api_key=api_key)
     except InvalidModelJSON as exc:
-        error_path = save_json_error(exc.raw_text, exc.error, runs_dir="runs")
-        print(f"[red]Model returned invalid JSON.[/red] Saved error artifact to [bold]{error_path}[/bold].")
+        failure_messages = {
+            "json_decode": "Model returned invalid JSON",
+            "schema_validation": "Model returned JSON that didn't match schema",
+            "empty_output": "Model returned empty output",
+        }
+        message = failure_messages.get(exc.kind, "Model output validation failed")
+        error_path = save_json_error(exc.raw_text, exc.error, exc.kind, runs_dir="runs")
+        print(f"[red]{message}.[/red] Saved error artifact to [bold]{error_path}[/bold].")
         raise typer.Exit(code=1)
 
     save_run(result.raw, result.report, runs_dir="runs")

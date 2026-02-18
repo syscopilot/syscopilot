@@ -3,16 +3,27 @@ from dataclasses import dataclass
 from typing import Any
 
 from anthropic import Anthropic
+from pydantic import ValidationError
 
 from .models import Mode, Report, ReportLike, ShortReport
 from .prompts import SCHEMAS, SIZE_CONSTRAINTS, SYSTEM_PROMPT, USER_TEMPLATE
 
 
 class InvalidModelJSON(ValueError):
-    def __init__(self, raw_text: str, error: str):
-        super().__init__(f"Model returned invalid JSON: {error}")
+    def __init__(self, raw_text: str, error: str, kind: str):
+        super().__init__(f"Model output failure ({kind}): {error}")
         self.raw_text = raw_text
         self.error = error
+        self.kind = kind
+
+
+class EmptyModelOutput(InvalidModelJSON):
+    def __init__(self):
+        super().__init__(
+            raw_text="",
+            error="No text content found in model response",
+            kind="empty_output",
+        )
 
 
 @dataclass(frozen=True)
@@ -26,7 +37,10 @@ def _extract_text(resp) -> str:
     for block in resp.content:
         if hasattr(block, "text") and block.text:
             parts.append(block.text)
-    return "".join(parts).strip()
+    raw_text = "".join(parts)
+    if not raw_text.strip():
+        raise EmptyModelOutput()
+    return raw_text.strip()
 
 
 def _validate_report(data: dict, mode: Mode) -> ReportLike:
@@ -68,9 +82,16 @@ def analyze_system(
 
     raw = _extract_text(resp)
 
+    if not raw.strip():
+        raise EmptyModelOutput()
+
     try:
         data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise InvalidModelJSON(raw_text=raw, error=str(e), kind="json_decode") from e
+
+    try:
         report = _validate_report(data, mode)
-    except (json.JSONDecodeError, ValueError) as e:
-        raise InvalidModelJSON(raw_text=raw, error=str(e)) from e
+    except ValidationError as e:
+        raise InvalidModelJSON(raw_text=raw, error=str(e), kind="schema_validation") from e
     return AnalysisResult(report=report, raw=raw)

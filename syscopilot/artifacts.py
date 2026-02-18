@@ -55,11 +55,16 @@ def save_run(raw: str, report: dict[str, Any] | BaseModel, runs_dir: str = "runs
     }
 
 
-def save_json_error(raw: str, error: str, runs_dir: str = "runs") -> str:
+def save_json_error(raw: str, error: str, kind: str, runs_dir: str = "runs") -> str:
     ensure_runs_dir(runs_dir)
     ts = make_timestamp()
     err_path = Path(runs_dir) / f"json_error_{ts}.txt"
 
-    contents = f"InvalidModelJSON: {error}\n\n---- RAW OUTPUT ----\n{raw}"
+    contents = (
+        f"MODEL_OUTPUT_FAILURE\n"
+        f"kind: {kind}\n"
+        f"error: {error}\n\n"
+        f"---- RAW OUTPUT ----\n{raw}"
+    )
     _atomic_write(err_path, contents)
     return str(err_path)
