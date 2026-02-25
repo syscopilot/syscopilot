@@ -2,28 +2,11 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from anthropic import Anthropic
 from pydantic import ValidationError
 
+from .llm import EmptyModelOutput, InvalidModelJSON, extract_text, resolve_client
 from .models import Mode, Report, ReportLike, ShortReport
 from .prompts import SCHEMAS, SIZE_CONSTRAINTS, SYSTEM_PROMPT, USER_TEMPLATE
-
-
-class InvalidModelJSON(ValueError):
-    def __init__(self, raw_text: str, error: str, kind: str):
-        super().__init__(f"Model output failure ({kind}): {error}")
-        self.raw_text = raw_text
-        self.error = error
-        self.kind = kind
-
-
-class EmptyModelOutput(InvalidModelJSON):
-    def __init__(self):
-        super().__init__(
-            raw_text="",
-            error="No text content found in model response",
-            kind="empty_output",
-        )
 
 
 @dataclass(frozen=True)
@@ -32,29 +15,10 @@ class AnalysisResult:
     raw: str
 
 
-def _extract_text(resp) -> str:
-    parts = []
-    for block in resp.content:
-        if hasattr(block, "text") and block.text:
-            parts.append(block.text)
-    raw_text = "".join(parts)
-    if not raw_text.strip():
-        raise EmptyModelOutput()
-    return raw_text.strip()
-
-
 def _validate_report(data: dict, mode: Mode) -> ReportLike:
     if mode == "full":
         return Report.model_validate(data)
     return ShortReport.model_validate(data)
-
-
-def _resolve_client(client: Any | None = None, api_key: str | None = None) -> Any:
-    if client is not None:
-        return client
-    if not api_key:
-        raise RuntimeError("api_key is required when client is not provided")
-    return Anthropic(api_key=api_key)
 
 
 def analyze_system(
@@ -64,7 +28,7 @@ def analyze_system(
     client: Any | None = None,
     api_key: str | None = None,
 ) -> AnalysisResult:
-    resolved_client = _resolve_client(client=client, api_key=api_key)
+    resolved_client = resolve_client(client=client, api_key=api_key)
 
     prompt = USER_TEMPLATE.format(
         description=description,
@@ -80,7 +44,7 @@ def analyze_system(
         messages=[{"role": "user", "content": prompt}],
     )
 
-    raw = _extract_text(resp)
+    raw = extract_text(resp)
 
     if not raw.strip():
         raise EmptyModelOutput()

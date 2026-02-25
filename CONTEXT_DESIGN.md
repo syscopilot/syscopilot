@@ -1,27 +1,29 @@
 # Syscopilot – Design Context (Current)
 
 ## What this is
-Syscopilot is a local CLI that reviews a system design description using Anthropic Claude Opus and returns a structured, opinionated critique focused on distributed-systems failure modes.
+Syscopilot is a local CLI that reviews a system design description using Anthropic Claude Opus and returns structured, opinionated output focused on distributed-systems failure modes.
 
-The goal is **not** “LLM text output”, but a tool where:
-- the model produces structured JSON,
-- our code validates it (Pydantic),
-- we support cost-controlled modes (short/full),
-- we save artifacts for reproducibility,
-- output JSON is compact + stable for diffing.
+The tool is intentionally schema-first:
+- model produces structured JSON,
+- code validates JSON with Pydantic,
+- short/full modes control cost and verbosity,
+- CLI persists artifacts for reproducibility and diffing.
 
-## Current state (V0)
+## Current state (V1)
 - Language: Python
 - Interface: CLI (Typer + Rich)
 - LLM: Anthropic Opus via `anthropic` SDK
-- Input: a `.txt/.md` system description file
-- Output:
-  - Validated Pydantic model:
-    - `ShortReport` (6 keys) OR `Report` (10 keys)
-  - CLI prints a digest (Architecture Summary + Top Concrete Fixes)
-  - Artifacts saved under `runs/` per execution
+- Inputs:
+  - `analyze`: implementation/system description file
+  - `spec extract`: implementation/system description file
+  - `spec propose`: goals/constraints description file
+- Outputs:
+  - Validated analysis report (`ShortReport` or `Report`)
+  - Validated SystemSpec v1 (`SystemSpec`)
+  - CLI digest and summary views
+  - Artifacts under `runs/`
 
-## Core review lenses (must stay)
+## Core review lenses (analysis)
 1) Idempotency & duplicate handling
 2) Separation of responsibilities
 3) Backpressure & flow control
@@ -30,7 +32,8 @@ The goal is **not** “LLM text output”, but a tool where:
 
 ## Output schemas
 
-### Short mode schema (default) — 6 keys
+### Analysis schemas
+#### Short mode schema (default) — 6 keys
 Pydantic model `ShortReport` keys:
 - architecture_summary: str
 - assumptions_detected: List[str]
@@ -39,7 +42,7 @@ Pydantic model `ShortReport` keys:
 - failure_scenarios: List[str]
 - concrete_fixes: List[str]
 
-### Full mode schema — 10 keys
+#### Full mode schema — 10 keys
 Pydantic model `Report` keys:
 - architecture_summary: str
 - assumptions_detected: List[str]
@@ -52,132 +55,155 @@ Pydantic model `Report` keys:
 - suggested_metrics: List[str]
 - failure_injection_tests: List[str]
 
-Notes:
-- Code uses `ReportLike = Union[ShortReport, Report]`.
-- Default mode is **short** to reduce truncation risk + cost.
+### SystemSpec v1 schema
+Pydantic model `SystemSpec` includes:
+- `schema_version: Literal["syscopilot.systemspec.v1"]`
+- `system`: name/domain/goals/non_goals
+- `components[]`: id/type/name/responsibilities/depends_on/runtime/scaling
+- `links[]`: id/from_id/to_id/transport/semantics/delivery/ordering/key/backpressure
+- `data_stores[]`: id/type/ownership/notes/retention
+- `contracts[]`: id/name/owner_component_id/schema/evolution
+- `deploy`: orchestration/regions/observability/notes
+- `requirements`: slos/constraints/throughput_targets/latency_budgets
+- `open_questions[]`
+- `extensions` (escape hatch dict)
 
-## Prompting strategy (cost controlled + JSON safety)
+Validation stays intentionally light:
+- IDs are non-empty strings where defined.
+- Enum-like values remain freeform strings.
+
+## Prompting strategy
 We force:
 - JSON only (no markdown, no commentary)
-- compact output (no pretty printing, no extra whitespace/newlines)
-- strict caps on list sizes and item length
+- single JSON object output
+- compact JSON (no pretty printing)
+- short/full size caps on list content
 - low temperature (0.0)
-- constraints + short mode as the primary mechanism to prevent truncation
 
-Important lessons:
-- JSON parse errors often come from **truncation** (cut mid-string), not formatting.
-- Prefer shrinking output over retries to control cost.
-- If size constraints are too tight, the model should output the **shortest valid JSON** that satisfies the schema.
+SystemSpec prompt modes:
+- `extract`: must not invent unknown details; unknowns should become `open_questions`; optional semantic fields may use `"unknown"`.
+- `propose`: may propose sensible defaults but must capture assumptions and open questions.
 
 ## Module boundaries (important)
-### analyzer.py
-Owns:
-- Constructing the user prompt (from templates + schema for the chosen mode)
-- Calling Anthropic (or using an injected client)
-- Extracting text from the model response
-- Parsing JSON
-- Validating with Pydantic
-- Returning `AnalysisResult(report, raw)`
+### llm.py
+Owns shared LLM utilities:
+- `resolve_client(...)`
+- `extract_text(...)`
+- model output exceptions: `InvalidModelJSON`, `EmptyModelOutput`
 
-Does NOT own:
-- filesystem I/O / persistence
+### analyzer.py
+Owns analysis-only orchestration:
+- build analysis prompt
+- call LLM
+- parse JSON
+- validate `ShortReport`/`Report`
+- return `AnalysisResult(report, raw)`
+
+### spec_analyzer.py
+Owns spec-only orchestration:
+- build extract/propose spec prompt
+- call LLM
+- parse JSON
+- validate `SystemSpec`
+- return `SpecResult(spec, raw)`
 
 ### artifacts.py
-Owns:
-- Creating the `runs/` directory
-- Writing artifacts atomically
-- JSON serialization of validated report in compact, sorted-key form
+Owns persistence:
+- create `runs/`
+- atomic writes
+- deterministic JSON serialization
+- canonicalized SystemSpec persistence
 
 ### cli.py
-Owns:
-- CLI UX (help behavior, args/options validation)
-- Loading API key from environment
-- Orchestrating analyzer + artifacts
-- Printing a digest to the console
-- Mapping model-output failures to friendly messages and exit codes
+Owns orchestration/UX only:
+- command routing and options validation
+- env loading and API key lookup
+- analyzer/spec_analyzer invocation
+- artifact persistence via `artifacts.py`
+- user-facing summaries and warnings
 
-### models.py / prompts.py
-- `models.py`: Pydantic schemas + `Mode` type.
-- `prompts.py`: system prompt, user template, and schema/size-constraint strings.
+### models.py / prompts.py / spec_prompts.py
+- `models.py`: Pydantic schemas + mode types.
+- `prompts.py`: analysis prompt templates.
+- `spec_prompts.py`: SystemSpec extract/propose templates.
 
 ## Model-output failure taxonomy
-Analyzer raises `InvalidModelJSON` (or subclasses) on model output failures, with a `kind`:
-- `empty_output`: no text content extracted from model response
-- `json_decode`: text was present but not valid JSON
-- `schema_validation`: JSON parsed but did not match the required schema
+Analyzer layers raise `InvalidModelJSON` with `kind`:
+- `empty_output`: no text content extracted
+- `json_decode`: text not valid JSON
+- `schema_validation`: JSON parsed but schema mismatch
 
-CLI:
-- Prints a friendly message for the failure kind
-- Saves an error artifact `runs/json_error_<ts>.txt`
-- Exits with code 1
+CLI behavior:
+- maps `kind` to a friendly message
+- saves `runs/json_error_<ts>.txt`
+- exits code 1
 
 ## Artifacts (run logging)
-Each analysis writes to `runs/` (directory created if missing):
+Each command writes artifacts under `runs/`.
 
-Success:
-- `runs/raw_<ts>.txt` — raw model output
-- `runs/report_<ts>.json` — validated report JSON (compact + sorted keys)
+Analysis success:
+- `runs/raw_<ts>.txt`
+- `runs/report_<ts>.json`
+
+SystemSpec success:
+- `runs/spec_raw_<ts>.txt`
+- `runs/spec_<ts>.json`
 
 Failure (model output issues):
-- `runs/json_error_<ts>.txt` — contains:
-  - failure kind
-  - error message
-  - raw output
+- `runs/json_error_<ts>.txt` (kind + error + raw output)
 
 Notes:
-- JSON output is deterministic in formatting (compact + sorted keys) for diffing.
-- Filenames are collision-resistant (timestamp + pid + random suffix), not reproducible across runs.
+- JSON artifacts use compact formatting and sorted keys.
+- SystemSpec artifacts are canonicalized; lists of objects with `id` are sorted by `id`.
+- Filenames are collision-resistant (timestamp + pid + random suffix).
 
 ## CLI behavior and usage
-
 ### Help UX
-- Running the CLI with **no subcommand** prints help and exits cleanly (code 0).
+- Running the CLI with no subcommand prints help and exits code 0.
 
 ### Analyze command
-Examples:
 - `python -m syscopilot.cli analyze system.md`
 - `python -m syscopilot.cli analyze system.md --mode short`
 - `python -m syscopilot.cli analyze system.md --mode full`
 
+### SystemSpec commands
+- `python -m syscopilot.cli spec extract system.md --mode short`
+- `python -m syscopilot.cli spec extract system.md --mode full`
+- `python -m syscopilot.cli spec propose goals.md --mode short`
+- `python -m syscopilot.cli spec propose goals.md --mode full`
+
 `--mode`:
 - accepts `short` or `full` (case-insensitive)
-- default: `short`
-- invalid values fail fast with a friendly error and exit code 2
+- invalid values exit with code 2
+
+Spec commands print:
+- counts by `component.type`
+- counts by `link.transport.kind`
+- top open questions
+- non-fatal semantic warnings (e.g., duplicate ids, dangling references)
 
 ## Repo structure (expected)
 - syscopilot/
-  - cli.py        # Typer app + commands (orchestration + UX)
-  - analyzer.py   # Anthropic call + parsing + Pydantic validation
-  - artifacts.py  # persistence + atomic writes + deterministic JSON formatting
-  - prompts.py    # system/user templates + mode-specific constraints
-  - models.py     # Pydantic schemas + mode types
-- runs/ (not committed): raw outputs + json errors + reports
-- .env (not committed): ANTHROPIC_API_KEY
+  - cli.py              # Typer app + commands (orchestration + UX)
+  - llm.py              # shared LLM client/response utilities + output exceptions
+  - analyzer.py         # analysis orchestration (prompt/call/parse/validate)
+  - spec_analyzer.py    # SystemSpec orchestration (extract/propose)
+  - artifacts.py        # persistence + atomic writes + deterministic JSON formatting
+  - models.py           # Pydantic schemas + mode types
+  - prompts.py          # analysis templates + constraints
+  - spec_prompts.py     # SystemSpec templates + constraints
+  - spec_validation.py  # semantic warnings for SystemSpec references/ids
+- runs/ (not committed): raw outputs + json errors + reports/specs
+- .env (not committed): `ANTHROPIC_API_KEY`
 
 ## Non-goals (for now)
 - Web UI
 - Auth/accounts/payments
 - Tool-calling agents
-- Repo scanning / code parsing (future)
-
-## Next tasks (new priority order)
-1) Deterministic scoring (no extra API calls)
-   - compute a risk score per lens (0–10) from the validated JSON
-   - print “Top Risks” + “3-step action plan”
-   - keep it reproducible (pure function over validated output)
-
-2) Add lightweight smoke tests
-   - schema validation tests for short/full
-   - artifact creation tests (paths + filename pattern)
-   - CLI help/no-subcommand behavior
-
-3) Prompt hardening for JSON-only correctness
-   - keep schemas aligned with Pydantic models
-   - enforce caps (max items, max length)
-   - optionally define an explicit “empty-but-valid JSON” policy and treat as failure
+- Repo scanning / code parsing
 
 ## Known risks / gotchas
-- Opus output truncation -> invalid JSON; manage by shrinking output.
-- Keep prompt + schema aligned (keys must match exactly).
+- LLM truncation can produce invalid JSON.
+- Prompt/schema drift must be avoided.
 - Never commit `.env` or API keys.
-- Artifacts should not overwrite: keep collision-proof filenames.
+- Artifacts are intended to be collision-proof and append-only.

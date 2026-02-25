@@ -31,6 +31,18 @@ def _atomic_write(path: Path, content: str) -> None:
     os.replace(tmp_path, path)
 
 
+def _canonicalize(value: Any) -> Any:
+    if isinstance(value, dict):
+        canonical_dict = {key: _canonicalize(val) for key, val in value.items()}
+        return dict(sorted(canonical_dict.items(), key=lambda item: item[0]))
+    if isinstance(value, list):
+        canonical_list = [_canonicalize(item) for item in value]
+        if canonical_list and all(isinstance(item, dict) and "id" in item for item in canonical_list):
+            return sorted(canonical_list, key=lambda item: str(item["id"]))
+        return canonical_list
+    return value
+
+
 def save_run(raw: str, report: dict[str, Any] | BaseModel, runs_dir: str = "runs") -> dict[str, str]:
     ensure_runs_dir(runs_dir)
     ts = make_timestamp()
@@ -52,6 +64,30 @@ def save_run(raw: str, report: dict[str, Any] | BaseModel, runs_dir: str = "runs
     return {
         "raw_path": str(raw_path),
         "report_path": str(report_path),
+    }
+
+
+def save_spec_run(raw: str, spec: dict[str, Any] | BaseModel, runs_dir: str = "runs") -> dict[str, str]:
+    ensure_runs_dir(runs_dir)
+    ts = make_timestamp()
+
+    raw_path = Path(runs_dir) / f"spec_raw_{ts}.txt"
+    spec_path = Path(runs_dir) / f"spec_{ts}.json"
+
+    _atomic_write(raw_path, raw)
+
+    spec_dict = _canonicalize(_as_dict(spec))
+    spec_json = json.dumps(
+        spec_dict,
+        separators=(",", ":"),
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    _atomic_write(spec_path, spec_json)
+
+    return {
+        "raw_path": str(raw_path),
+        "spec_path": str(spec_path),
     }
 
 
