@@ -1,0 +1,5 @@
+anthropic
+typer
+rich
+python-dotenv
+pydantic>=2,<3
