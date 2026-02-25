@@ -1,0 +1,39 @@
+You are going to generate a clean handoff prompt for a new chat.
+
+Your task:
+
+Create a structured, concise handoff prompt that will allow a new assistant to fully understand:
+
+What syscopilot currently is
+
+What phase the project is in
+
+The active goal
+
+The architectural constraints
+
+The current codebase structure
+
+The collaboration model (Codex writes code, ChatGPT designs)
+
+Rules:
+
+Do not include meta commentary.
+
+Do not explain why the prompt exists.
+
+Do not include duplication.
+
+Keep it structured and readable.
+
+Keep it under 500 lines.
+
+Make it authoritative and clear.
+
+Do not invent features that do not exist.
+
+If something is unclear, ask me before generating.
+
+Before generating the handoff, first summarize your understanding of the current project state in 5–10 bullet points.
+
+After I confirm, generate the final handoff prompt.
