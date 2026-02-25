@@ -7,10 +7,12 @@ import typer
 from dotenv import load_dotenv
 from rich import print
 
-from .analyzer import InvalidModelJSON, analyze_system
+from .analyzer import analyze_system
 from .artifacts import save_json_error, save_run, save_spec_run
+from .llm import InvalidModelJSON
 from .models import Mode, SystemSpec
 from .spec_analyzer import extract_spec, propose_spec
+from .spec_validation import validate_spec_semantics
 
 app = typer.Typer()
 spec_app = typer.Typer(help="SystemSpec generation commands.")
@@ -90,6 +92,15 @@ def _print_spec_summary(spec: SystemSpec) -> None:
         print("none")
 
 
+def _print_spec_warnings(spec: SystemSpec) -> None:
+    warnings = validate_spec_semantics(spec)
+    if not warnings:
+        return
+    print("\n[yellow][bold]Semantic warnings[/bold][/yellow]")
+    for warning in warnings:
+        print(f"[yellow]- {warning}[/yellow]")
+
+
 @app.command()
 def analyze(
     file: Path,
@@ -140,6 +151,7 @@ def spec_extract(
     print(f"Saved spec to [bold]{paths['spec_path']}[/bold]")
     print(f"Saved raw model output to [bold]{paths['raw_path']}[/bold]")
     _print_spec_summary(result.spec)
+    _print_spec_warnings(result.spec)
 
 
 @spec_app.command("propose")
@@ -164,6 +176,7 @@ def spec_propose(
     print(f"Saved spec to [bold]{paths['spec_path']}[/bold]")
     print(f"Saved raw model output to [bold]{paths['raw_path']}[/bold]")
     _print_spec_summary(result.spec)
+    _print_spec_warnings(result.spec)
 
 
 if __name__ == "__main__":

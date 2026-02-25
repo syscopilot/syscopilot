@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .analyzer import EmptyModelOutput, InvalidModelJSON, _extract_text, _resolve_client
+from .llm import EmptyModelOutput, InvalidModelJSON, extract_text, resolve_client
 from .models import Mode, SystemSpec
 from .spec_prompts import (
     EXTRACT_TEMPLATE,
@@ -29,7 +29,7 @@ def _run_spec_prompt(
     client: Any | None = None,
     api_key: str | None = None,
 ) -> SpecResult:
-    resolved_client = _resolve_client(client=client, api_key=api_key)
+    resolved_client = resolve_client(client=client, api_key=api_key)
 
     prompt = template.format(
         description=description,
@@ -45,7 +45,7 @@ def _run_spec_prompt(
         messages=[{"role": "user", "content": prompt}],
     )
 
-    raw = _extract_text(resp)
+    raw = extract_text(resp)
 
     if not raw.strip():
         raise EmptyModelOutput()
