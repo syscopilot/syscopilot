@@ -104,3 +104,47 @@ def save_json_error(raw: str, error: str, kind: str, runs_dir: str = "runs") -> 
     )
     _atomic_write(err_path, contents)
     return str(err_path)
+
+
+def save_design_turn(
+    run_dir: str,
+    turn_idx: int,
+    user_message: str,
+    response_dict: dict[str, Any],
+    system_spec_dict: dict[str, Any],
+    last_error_dict: dict[str, Any] | None,
+) -> dict[str, str]:
+    design_dir = Path(run_dir) / "design"
+    design_dir.mkdir(parents=True, exist_ok=True)
+
+    response_path = design_dir / "response.json"
+    spec_path = design_dir / "system_spec.json"
+    transcript_path = design_dir / "transcript.jsonl"
+
+    canonical_response = _canonicalize(response_dict)
+    canonical_spec = _canonicalize(system_spec_dict)
+    canonical_error = _canonicalize(last_error_dict) if last_error_dict is not None else None
+
+    _atomic_write(
+        response_path,
+        json.dumps(canonical_response, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+    )
+    _atomic_write(
+        spec_path,
+        json.dumps(canonical_spec, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+    )
+
+    transcript_record = {
+        "turn": turn_idx,
+        "user_message": user_message,
+        "response": canonical_response,
+        "last_error": canonical_error,
+    }
+    with transcript_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(transcript_record, separators=(",", ":"), sort_keys=True, ensure_ascii=False) + "\n")
+
+    return {
+        "response_path": str(response_path),
+        "spec_path": str(spec_path),
+        "transcript_path": str(transcript_path),
+    }
