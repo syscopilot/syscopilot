@@ -18,3 +18,5 @@ jobs:
           pip install -r requirements.txt
       - name: Verify package imports
         run: python -m compileall syscopilot
+
+        
