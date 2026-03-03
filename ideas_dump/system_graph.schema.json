@@ -1,0 +1,328 @@
+{
+    "$defs": {
+        "Edge": {
+            "properties": {
+                "from_node": {
+                    "description": "Source node id",
+                    "title": "From Node",
+                    "type": "string"
+                },
+                "to_node": {
+                    "description": "Target node id",
+                    "title": "To Node",
+                    "type": "string"
+                },
+                "relation": {
+                    "enum": [
+                        "calls",
+                        "publishes",
+                        "delivers",
+                        "writes",
+                        "reads",
+                        "emits",
+                        "ingests",
+                        "triggers"
+                    ],
+                    "title": "Relation",
+                    "type": "string"
+                },
+                "payload": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/Payload"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null
+                }
+            },
+            "required": [
+                "from_node",
+                "to_node",
+                "relation"
+            ],
+            "title": "Edge",
+            "type": "object"
+        },
+        "Node": {
+            "properties": {
+                "id": {
+                    "description": "Unique identifier in the graph",
+                    "title": "Id",
+                    "type": "string"
+                },
+                "kind": {
+                    "enum": [
+                        "service",
+                        "datastore",
+                        "queue",
+                        "job",
+                        "external",
+                        "client"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                },
+                "name": {
+                    "title": "Name",
+                    "type": "string"
+                },
+                "tech": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Tech"
+                },
+                "compute_model": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "request_response",
+                                "stream",
+                                "batch",
+                                "async_worker"
+                            ],
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Compute Model"
+                },
+                "statefulness": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "stateless",
+                                "stateful"
+                            ],
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Statefulness"
+                },
+                "criticality": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "low",
+                                "medium",
+                                "high"
+                            ],
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Criticality"
+                },
+                "scaling_unit": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "cpu",
+                                "partitions",
+                                "concurrency",
+                                "io",
+                                "unknown"
+                            ],
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Scaling Unit"
+                },
+                "runtime": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Runtime"
+                },
+                "notes": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Notes"
+                }
+            },
+            "required": [
+                "id",
+                "kind",
+                "name"
+            ],
+            "title": "Node",
+            "type": "object"
+        },
+        "Payload": {
+            "properties": {
+                "name": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Name"
+                },
+                "schema_ref": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Schema Ref"
+                },
+                "format": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "json",
+                                "avro",
+                                "protobuf",
+                                "csv",
+                                "unknown"
+                            ],
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Format"
+                },
+                "rate": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Rate"
+                },
+                "delivery": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "at_most_once",
+                                "at_least_once",
+                                "exactly_once",
+                                "unknown"
+                            ],
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Delivery"
+                }
+            },
+            "title": "Payload",
+            "type": "object"
+        }
+    },
+    "properties": {
+        "schema_version": {
+            "default": "0.1.0",
+            "description": "Schema version for this graph (semver recommended).",
+            "examples": [
+                "0.1.0"
+            ],
+            "title": "Schema Version",
+            "type": "string"
+        },
+        "created_at": {
+            "description": "UTC timestamp when this graph artifact was created.",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+        },
+        "title": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "title": "Title"
+        },
+        "description": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "title": "Description"
+        },
+        "nodes": {
+            "items": {
+                "$ref": "#/$defs/Node"
+            },
+            "title": "Nodes",
+            "type": "array"
+        },
+        "edges": {
+            "items": {
+                "$ref": "#/$defs/Edge"
+            },
+            "title": "Edges",
+            "type": "array"
+        }
+    },
+    "required": [
+        "nodes",
+        "edges"
+    ],
+    "title": "SystemGraph",
+    "type": "object"
+}
