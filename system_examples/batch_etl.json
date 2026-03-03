@@ -1,0 +1,18 @@
+{
+  "schema_version": "0.1.0",
+  "title": "Daily batch ETL",
+  "description": "A scheduler triggers a batch job that ingests from an external API, stores raw data in S3, then loads to a warehouse.",
+  "nodes": [
+    {"id": "job.cron", "kind": "job", "name": "Daily Cron", "compute_model": "batch"},
+    {"id": "svc.etl", "kind": "service", "name": "ETL Worker", "compute_model": "batch", "statefulness": "stateless"},
+    {"id": "ext.vendor", "kind": "external", "name": "Vendor API"},
+    {"id": "db.s3", "kind": "datastore", "name": "S3 Raw Bucket", "tech": "s3"},
+    {"id": "db.wh", "kind": "datastore", "name": "Data Warehouse", "tech": "warehouse"}
+  ],
+  "edges": [
+    {"from_node": "job.cron", "to_node": "svc.etl", "relation": "triggers"},
+    {"from_node": "svc.etl", "to_node": "ext.vendor", "relation": "calls"},
+    {"from_node": "svc.etl", "to_node": "db.s3", "relation": "writes", "payload": {"name": "raw_export", "format": "csv", "rate": "daily batch", "delivery": "unknown"}},
+    {"from_node": "svc.etl", "to_node": "db.wh", "relation": "writes", "payload": {"name": "daily_snapshot", "format": "unknown", "rate": "daily batch"}}
+  ]
+}

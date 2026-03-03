@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1.0",
+  "title": "REST API with Postgres",
+  "description": "Client calls an API service which reads/writes Postgres.",
+  "nodes": [
+    {"id": "client.web", "kind": "client", "name": "Web Client"},
+    {"id": "svc.api", "kind": "service", "name": "API Service", "compute_model": "request_response", "statefulness": "stateless"},
+    {"id": "db.pg", "kind": "datastore", "name": "Postgres", "tech": "postgres"}
+  ],
+  "edges": [
+    {"from_node": "client.web", "to_node": "svc.api", "relation": "calls"},
+    {"from_node": "svc.api", "to_node": "db.pg", "relation": "reads"},
+    {"from_node": "svc.api", "to_node": "db.pg", "relation": "writes"}
+  ]
+}
