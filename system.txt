@@ -1,3 +1,0 @@
-WebSocket ingestion receives price ticks.
-Ticks are processed immediately and written to Postgres.
-Alerts are triggered synchronously.
