@@ -1,5 +1,9 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from typing import List, Optional, Literal
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, Field, model_validator
 
 
 # -------------------------
@@ -50,7 +54,6 @@ class Node(BaseModel):
     kind: NodeKind
     name: str
 
-    # Optional classification
     tech: Optional[str] = None  # kafka, postgres, fastapi, etc.
 
     compute_model: Optional[
@@ -58,7 +61,6 @@ class Node(BaseModel):
     ] = None
 
     statefulness: Optional[Literal["stateless", "stateful"]] = None
-
     criticality: Optional[Literal["low", "medium", "high"]] = None
 
     scaling_unit: Optional[
@@ -66,7 +68,6 @@ class Node(BaseModel):
     ] = None
 
     runtime: Optional[str] = None  # python, jvm, node, managed, etc.
-
     notes: Optional[str] = None
 
 
@@ -85,19 +86,32 @@ class Edge(BaseModel):
 # Graph Root
 # -------------------------
 
-from pydantic import model_validator
-
-
 class SystemGraph(BaseModel):
+    schema_version: str = Field(
+        default="0.1.0",
+        description="Schema version for this graph (semver recommended).",
+        examples=["0.1.0"],
+    )
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC timestamp when this graph artifact was created.",
+    )
+
+    title: Optional[str] = None
+    description: Optional[str] = None
+
     nodes: List[Node]
     edges: List[Edge]
 
     @model_validator(mode="after")
-    def validate_edges(self):
-        node_ids = {node.id for node in self.nodes}
-        for edge in self.edges:
-            if edge.from_node not in node_ids:
-                raise ValueError(f"Unknown from_node: {edge.from_node}")
-            if edge.to_node not in node_ids:
-                raise ValueError(f"Unknown to_node: {edge.to_node}")
+    def validate_edges(self) -> "SystemGraph":
+        node_ids = {n.id for n in self.nodes}
+
+        for e in self.edges:
+            if e.from_node not in node_ids:
+                raise ValueError(f"Unknown from_node: {e.from_node}")
+            if e.to_node not in node_ids:
+                raise ValueError(f"Unknown to_node: {e.to_node}")
+
         return self
